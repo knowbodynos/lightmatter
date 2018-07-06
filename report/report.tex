@@ -1,0 +1,174 @@
+% !TEX TS-program = pdflatex
+% !TEX encoding = UTF-8 Unicode
+
+% This is a simple template for a LaTeX document using the "article" class.
+% See "book", "report", "letter" for other types of document.
+
+\documentclass[12pt]{article} % use larger type; default would be 10pt
+
+\usepackage[utf8]{inputenc} % set input encoding (not needed with XeLaTeX)
+
+%%% Examples of Article customizations
+% These packages are optional, depending whether you want the features they provide.
+% See the LaTeX Companion or other references for full information.
+
+%%% PAGE DIMENSIONS
+\usepackage{geometry} % to change the page dimensions
+\geometry{a4paper} % or letterpaper (US) or a5paper or....
+% \geometry{margin=2in} % for example, change the margins to 2 inches all round
+% \geometry{landscape} % set up the page for landscape
+%   read geometry.pdf for detailed page layout information
+
+\usepackage{graphicx} % support the \includegraphics command and options
+
+\usepackage{amsmath, amsthm, amsfonts, ulem, cancel, hyperref}
+\newtheorem{definition}{Definition}
+
+\usepackage{listings}
+\lstset{breaklines=true}
+
+% \usepackage[parfill]{parskip} % Activate to begin paragraphs with an empty line rather than an indent
+
+%%% PACKAGES
+\usepackage{booktabs} % for much better looking tables
+\usepackage{array} % for better arrays (eg matrices) in maths
+\usepackage{paralist} % very flexible & customisable lists (eg. enumerate/itemize, etc.)
+\usepackage{verbatim} % adds environment for commenting out blocks of text & for better verbatim
+\usepackage{subfig} % make it possible to include more than one captioned figure/table in a single float
+% These packages are all incorporated in the memoir class to one degree or another...
+
+%%% HEADERS & FOOTERS
+\usepackage{fancyhdr} % This should be set AFTER setting up the page geometry
+\pagestyle{fancy} % options: empty , plain , fancy
+\renewcommand{\headrulewidth}{0pt} % customise the layout...
+\lhead{}\chead{}\rhead{}
+\lfoot{}\cfoot{\thepage}\rfoot{}
+
+%%% SECTION TITLE APPEARANCE
+\usepackage{sectsty}
+\allsectionsfont{\sffamily\mdseries\upshape} % (See the fntguide.pdf for font help)
+% (This matches ConTeXt defaults)
+
+\setlength\parindent{0pt}
+\setlength{\parskip}{\baselineskip}
+
+%%% ToC (table of contents) APPEARANCE
+\usepackage[nottoc,notlof,notlot]{tocbibind} % Put the bibliography in the ToC
+\usepackage[titles,subfigure]{tocloft} % Alter the style of the Table of Contents
+\renewcommand{\cftsecfont}{\rmfamily\mdseries\upshape}
+\renewcommand{\cftsecpagefont}{\rmfamily\mdseries\upshape} % No bold!
+
+%%% END Article customizations
+
+%%% The "real" document content comes below...
+
+%\title{The Calabi-Yau Database}
+%\author{Ross Altman}
+%\date{} % Activate to display a given date or no date (if empty),
+         % otherwise the current date is printed 
+
+\begin{document}
+%\maketitle
+
+\begin{section}{Layers}
+\begin{enumerate}
+\item
+2D Convolution:
+
+\begin{align}
+\mathcal{C}(x^{l}_{ijkm}, w^{l}_{npmq}) = \sum\limits_{\substack{n\in [0,R^{l}]\\ p\in [0,C^{l}]\\ m\in [0,N^{l}]}}{x^{l}_{i, (s_{1}j+n),(s_{2}k+p),m} w^{l}_{(R^{l}-n),(C^{l}-p),m,q}}
+\end{align}
+
+\item
+Max Pooling $2\times 2$:
+
+\begin{align}
+\mathcal{P}(x^{l}_{ijmn}) &= \sum\limits_{\substack{j\in [0,H^{l}]\\ m\in [0,W^{l}]}}{x^{l}_{ijmn} \delta^{l}_{ijpmqn}},\;\; \delta^{l}_{ijpmqn} = \left\{\begin{array}{ll} 
+      1 & p, q = \mathop{\mathrm{arg\, max}}\limits_{\substack{\alpha\in [s_{1}j,s_{1}j+k_{1}]\\ \beta\in [s_{2}m,s_{2}m+k_{2}]}}{x^{l}_{i\alpha\beta n}} \\
+      0 & \text{otherwise} \\
+   \end{array}\right.
+\end{align}
+
+\item
+Flatten:
+
+\begin{align}
+\mathcal{F}(x^{l}_{ijkm}) = x^{l}_{i,(H^{l}\times W^{l}\times m + H^{l}\times k + j)}
+\end{align}
+
+\item
+Fully Connected (Dense):
+
+\begin{align}
+\mathcal{D}(x^{l}_{ij}, w^{l}_{jk}) = \sum\limits_{j\in [0,H^{l}\times W^{l}\times N^{l}]}{x^{l}_{ij} w^{l}_{jk}}
+\end{align}
+\end{enumerate}
+\end{section}
+
+\begin{section}{Activation Functions}
+\begin{enumerate}
+\item
+ReLU:
+
+\begin{align}
+\mathcal{R}(z^{l}_{i}) &= \left\{\begin{array}{ll} 
+      z^{l}_{i} & z^{l}_{i}\geq 0 \\
+      0 & z^{l}_{i} < 0 \\
+   \end{array}\right.
+\end{align}
+
+\begin{align}
+\partial_{z^{l}_{i}}\mathcal{R} &= \left\{\begin{array}{ll} 
+      1 & z^{l}_{i} > 0 \\
+      1/2 & z^{l}_{i} = 0 \\
+      0 & z^{l}_{i} < 0 \\
+   \end{array}\right.
+\end{align}
+
+\item
+Softmax:
+
+\begin{align}
+\mathcal{S}(z^{l}_{i}) &= \frac{e^{z^{l}_{i}}}{\sum\limits_{k}{e^{z^{l}_{k}}}}
+\end{align}
+
+\begin{align}
+\partial_{z^{l}_{i}}\mathcal{S} &= \left\{\begin{array}{ll} 
+      \frac{1}{\left(\sum\limits_{k}{e^{z^{l}_{k}}}\right)^{2}}e^{z^{l}_{i}}\sum\limits_{k\neq j}{e^{z^{l}_{k}}} & i = j \\
+      \frac{1}{\left(\sum\limits_{k}{e^{z^{l}_{k}}}\right)^{2}}e^{z^{l}_{i}}e^{z^{l}_{j}} & i \neq j \\
+   \end{array}\right.
+\end{align}
+\end{enumerate}
+\end{section}
+
+\begin{section}{Cost Function}
+Softmax cross-entropy:
+
+\begin{align}
+\mathcal{J}(z^{l}_{ij}) &= \frac{1}{B} \sum\limits_{i=0}^{B}{\left(\sum\limits_{j}{-y_{ij} \text{log}(x^{L}_{ij})}\right)}
+\end{align}
+
+\begin{align}
+\partial_{z^{L-1}_{ij}}\mathcal{J} &= \frac{1}{B} \sum\limits_{k=0}^{B}{\left(\sum\limits_{m}{-\frac{y_{km}}{x^{L}_{km}}\frac{\partial x^{L}_{km}}{\partial z^{L-1}_{ij}}}\right)}
+\end{align}
+\end{section}
+
+\begin{section}{Backpropagation}
+\begin{align}
+x^{l} &= \sigma_{l-1}(z^{l-1}) \\
+z^{l} &= a^{l} + b^{l} \\
+a^{l} &= f^{l}(x^{l},w^{l})
+\end{align}
+
+\begin{align}
+\frac{\partial x^{L}}{\partial w^{L-1}} &= \frac{\partial S}{\partial z^{L-1}}\frac{\partial \mathcal{D}^{L-1}}{\partial w^{L-1}} \\
+\frac{\partial x^{L}}{\partial b^{L-1}} &= \frac{\partial S}{\partial z^{L-1}}
+\end{align}
+
+\begin{align}
+\frac{\partial x^{L}}{\partial w^{L-2}} &= \frac{\partial S}{\partial z^{L-1}}\frac{\partial \mathcal{D}^{L-1}}{\partial x^{L-1}}\frac{\partial R}{\partial z^{L-2}}\frac{\partial \mathcal{D}^{L-2}}{\partial w^{L-2}} \\
+\frac{\partial x^{L}}{\partial b^{L-1}} &= \frac{\partial S}{\partial z^{L-1}}\frac{\partial \mathcal{D}^{L-1}}{\partial x^{L-1}}\frac{\partial R}{\partial z^{L-2}}
+\end{align}
+\end{section}
+
+\end{document}
