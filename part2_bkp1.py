@@ -81,7 +81,7 @@ def model(x_image, x_image_shape = [28, 28]):
     x_input = tf.reshape(x_image, [batch] + list(x_image_shape) + [in_channels])
 
     # Layer 1 (2D convolution layer)
-    filter_shape_1 = [5, 5]
+    filter_shape_1 = [10, 10]
     in_channels_1 = in_channels
     out_channels_1 = 32
 
@@ -94,7 +94,7 @@ def model(x_image, x_image_shape = [28, 28]):
     # Layer 2 (2D convolution layer)
     filter_shape_2 = [5, 5]
     in_channels_2 = out_channels_1
-    out_channels_2 = 64
+    out_channels_2 = 16
 
     W_conv2d_2 = weight_variable(filter_shape_2 + [in_channels_2, out_channels_2])
     b_conv2d_2 = bias_variable([out_channels_2])
@@ -102,10 +102,9 @@ def model(x_image, x_image_shape = [28, 28]):
     y_conv2d_2 = tf.nn.relu(conv_2d(y_pool2x2_1, W_conv2d_2) + b_conv2d_2)
     y_pool2x2_2 = max_pool_2x2(y_conv2d_2)
 
-    # Flatten input
+    # Layer 3 (Fully connected layer)
     y_flattened = flatten(y_pool2x2_2)
 
-    # Layer 3 (Fully connected layer)
     in_channels_3 = y_flattened.shape.as_list()[-1]
     out_channels_3 = 1024
 
@@ -150,15 +149,13 @@ def main(_):
     cross_entropy = tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits_v2(labels=y_, logits=y))
     train_step = tf.train.AdagradOptimizer(0.5).minimize(cross_entropy)
-    correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
-    accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
     sess = tf.InteractiveSession()
-    sess.run(tf.global_variables_initializer())
-
+    tf.global_variables_initializer().run()
+    
     # Train
-    batch_size = 50#100
-    epochs = 19#200
+    batch_size = 100
+    epochs = 200
     batch_num = 1
     while mnist.train.epochs_completed < epochs:
         prev_nepoch = mnist.train.epochs_completed
@@ -167,13 +164,13 @@ def main(_):
             batch_num = 1
         sess.run(train_step, feed_dict={x: batch_xs, y_: batch_ys})
         if batch_num % 50 == 0:
-            batch_accuracy = sess.run(accuracy, feed_dict={x: batch_xs, y_: batch_ys})
-            print("Epoch: {0}, Batch: {1}, Accuracy: {2:.4f}".format(mnist.train.epochs_completed + 1, batch_num, batch_accuracy))
+            print("Epoch: {}, Batch: {}".format(mnist.train.epochs_completed + 1, batch_num))
         batch_num += 1
 
     # Test trained model
-    test_accuracy = sess.run(accuracy, feed_dict={x: mnist.test.images, y_: mnist.test.labels})
-    print("\n Test Accuracy: {0:.4f}".format(test_accuracy))
+    correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
+    accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    print(sess.run(accuracy, feed_dict={x: mnist.test.images, y_: mnist.test.labels}))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
