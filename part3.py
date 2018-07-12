@@ -42,7 +42,7 @@ class NN:
         def img_to_col(x, out_height, out_width, filter_height, filter_width, strides):
             batch_size = x.shape[0]
             in_channels = x.shape[3]
-            x_col = np.empty((batch_size * out_height * out_width, filter_height * filter_width * in_channels))
+            x_col = np.zeros((batch_size * out_height * out_width, filter_height * filter_width * in_channels))
             for b in range(batch_size):
                 for i in range(out_height):
                     for j in range(out_width):
@@ -51,13 +51,13 @@ class NN:
                             for q in range(filter_width):
                                 for r in range(in_channels):
                                     col = p * filter_width * in_channels + q * in_channels + r
-                                    x_col[row, col] = x[b, strides[1] * i + p, strides[2] * j + q, r]
+                                    x_col[row, col] += x[b, strides[1] * i + p, strides[2] * j + q, r]
             return x_col
         
         def col_to_img(x_col, out_height, out_width, in_height, in_width, filter_height, filter_width, strides):
             batch_size = x_col.shape[0] // (out_height * out_width)
             in_channels = x_col.shape[1] // (filter_height * filter_width)
-            x = np.empty((batch_size, in_height, in_width, in_channels))
+            x = np.zeros((batch_size, in_height, in_width, in_channels))
             for b in range(batch_size):
                 for i in range(out_height):
                     for j in range(out_width):
@@ -66,7 +66,7 @@ class NN:
                             for q in range(filter_width):
                                 for r in range(in_channels):
                                     col = p * filter_width * in_channels + q * in_channels + r
-                                    x[b, strides[1] * i + p, strides[2] * j + q, r] = x_col[row, col]
+                                    x[b, strides[1] * i + p, strides[2] * j + q, r] += x_col[row, col]
             return x
         
         
@@ -117,15 +117,16 @@ class NN:
                 """Compute the softmax of z."""
                 self.z = z
                 self.e_z = np.exp(z - z.max())
-                self.e_z_sum = self.e_z.reshape((self.e_z.shape[0], -1)).sum(axis = 1)
+                self.e_z_sum = self.e_z.reshape((self.e_z.shape[0], -1)).sum(axis = 1, keepdims = True)
 
             def out(self):
-                self.out = (self.e_z.T / self.e_z_sum).T
+                self.out = self.e_z / self.e_z_sum
                 return self.out
             
             def grad_z(self, grad_out):
                 """Compute the derivative of the softmax of z."""
-                self.grad_z = (grad_out * self.out) - grad_out.dot(np.outer(self.out, self.out))
+                # self.grad_z = (grad_out * self.out) - grad_out.dot(np.outer(self.out, self.out))
+                self.grad_z = (grad_out - np.diagonal(grad_out.dot(self.out.T))) * self.out
                 return self.grad_z
     
     
@@ -298,18 +299,33 @@ class NN:
     
     
     class Cost:
+        class mean_squared_error:
+            def __init__(self, y_label, y_out):
+                self.y_label = y_label
+                self.y_out = y_out
+            
+            def out(self):
+                self.out_val = 0.5 * (self.y_label - self.y_out) ** 2
+                return self.out_val
+            
+            def grad_x(self):
+                self.grad_x_val = self.y_out - self.y_label
+                return self.grad_x_val
+
+
         class cross_entropy:
             def __init__(self, y_label, y_out):
                 self.y_label = y_label
                 self.y_out = y_out
             
             def out(self):
-                self.out_val = -np.sum(self.y_label * np.log(self.y_out))
+                self.out_val = -np.sum(self.y_label * np.log(self.y_out), axis = 1)
                 return self.out_val
             
             def grad_x(self):
                 self.grad_x_val = -self.y_label / self.y_out
                 return self.grad_x_val
+
 
         class softmax_cross_entropy:
             def __init__(self, y_label, y_out):
@@ -318,7 +334,7 @@ class NN:
             
             def out(self):
                 softmax = NN.Activations.softmax(self.y_out)
-                self.out_val = -np.sum(self.y_label * np.log(softmax.out()))
+                self.out_val = -np.sum(self.y_label * np.log(softmax.out()), axis = 1)
                 return self.out_val
             
             def grad_z(self):
@@ -332,18 +348,58 @@ class NN:
             return correct_prediction.astype(np.float32).mean()
 
 
+    class Optimizers:
+        class Adagrad:
+            def __init__(self, lr, n_layers, initial_accumulator_value=0.1):
+                self.lr = lr
+                self.dw_sum_sq = [initial_accumulator_value for i in range(n_layers)]
+                self.db_sum_sq = [initial_accumulator_value for i in range(n_layers)]
+
+            def step(self, dw, db):
+                for i in range(len(dw)):
+                    if not dw[i] is None:
+                        self.dw_sum_sq[i] += dw[i] ** 2
+                    if not db[i] is None:
+                        self.db_sum_sq[i] += db[i] ** 2
+
+            def lr_eff(self):
+                for i in range(len(self.dw_sum_sq)):
+                    lr_eff_w = self.lr / np.sqrt(self.dw_sum_sq[i])
+                    lr_eff_b = self.lr / np.sqrt(self.db_sum_sq[i])
+                return lr_eff_w, lr_eff_b
+
+
 class Model:
-    def __init__(self, train_set, x_image_shape=[28, 28]):
+    def __init__(self, train_set, x_image_shape=[28, 28], optimizer=None, cost=NN.Cost.mean_squared_error):
         self.started = False
         self.train_set = train_set
         self.epochs_completed = 0
         self.x_image_shape = x_image_shape
+        self.optimizer_func = optimizer
+        self.cost_func = cost
         self.w = []
         self.dw = []
         self.b = []
         self.db = []
         self.f = []
         self.s = []
+
+    def optimize_with(self, optimizer_func):
+        self.optimizer_func = optimizer_func
+        return self
+
+    def minimize(self, cost_func):
+        self.cost_func = cost_func
+        return self
+
+    def init_layer_vars(self, w=None, b=None):
+        if not self.started:
+            self.w.append(w)
+            self.dw.append(None)
+            self.b.append(b)
+            self.db.append(None)
+            self.f.append(None)
+            self.s.append(None)
         
     def eval(self, batch_x_images):
         # Layer 0 (2D convolution layer)
@@ -354,13 +410,8 @@ class Model:
         # Reshape input
         x_0 = np.reshape(batch_x_images, [batch_x_images.shape[0]] + list(self.x_image_shape) + [in_channels_0])
 
-        if not self.started:
-            self.w.append(NN.Variables.weight_variable(filter_shape_0 + [in_channels_0, out_channels_0]))
-            self.dw.append(None)
-            self.b.append(NN.Variables.bias_variable([out_channels_0]))
-            self.db.append(None)
-            self.f.append(None)
-            self.s.append(None)
+        self.init_layer_vars(w = NN.Variables.weight_variable(filter_shape_0 + [in_channels_0, out_channels_0]),
+                             b = NN.Variables.bias_variable([out_channels_0]))
 
         self.f[0] = NN.Layers.conv2d(x_0, self.w[0])
         z_0 = self.f[0].out() + self.b[0]
@@ -372,13 +423,7 @@ class Model:
         in_channels_1 = out_channels_0
         out_channels_1 = in_channels_1
         
-        if not self.started:
-            self.w.append(None)
-            self.dw.append(None)
-            self.b.append(None)
-            self.db.append(None)
-            self.f.append(None)
-            self.s.append(None)
+        self.init_layer_vars()
 
         self.f[1] = NN.Layers.maxpool2d(y_0)
 
@@ -389,13 +434,8 @@ class Model:
         in_channels_2 = out_channels_1
         out_channels_2 = 64
 
-        if not self.started:
-            self.w.append(NN.Variables.weight_variable(filter_shape_2 + [in_channels_2, out_channels_2]))
-            self.dw.append(None)
-            self.b.append(NN.Variables.bias_variable([out_channels_2]))
-            self.db.append(None)
-            self.f.append(None)
-            self.s.append(None)
+        self.init_layer_vars(w = NN.Variables.weight_variable(filter_shape_2 + [in_channels_2, out_channels_2]),
+                             b = NN.Variables.bias_variable([out_channels_2]))
 
         self.f[2] = NN.Layers.conv2d(x_1, self.w[2])
         z_2 = self.f[2].out() + self.b[2]
@@ -407,13 +447,7 @@ class Model:
         in_channels_3 = out_channels_2
         out_channels_3 = in_channels_3
         
-        if not self.started:
-            self.w.append(None)
-            self.dw.append(None)
-            self.b.append(None)
-            self.db.append(None)
-            self.f.append(None)
-            self.s.append(None)
+        self.init_layer_vars()
 
         self.f[3] = NN.Layers.maxpool2d(x_2)
 
@@ -423,13 +457,7 @@ class Model:
         in_channels_4 = out_channels_3
         out_channels_4 = in_channels_4
         
-        if not self.started:
-            self.w.append(None)
-            self.dw.append(None)
-            self.b.append(None)
-            self.db.append(None)
-            self.f.append(None)
-            self.s.append(None)
+        self.init_layer_vars()
 
         self.f[4] = NN.Layers.flatten(x_3)
 
@@ -439,13 +467,8 @@ class Model:
         in_channels_5 = x_4.shape[-1]
         out_channels_5 = 1024
 
-        if not self.started:
-            self.w.append(NN.Variables.weight_variable([in_channels_5, out_channels_5]))
-            self.dw.append(None)
-            self.b.append(NN.Variables.bias_variable([out_channels_5]))
-            self.db.append(None)
-            self.f.append(None)
-            self.s.append(None)
+        self.init_layer_vars(w = NN.Variables.weight_variable([in_channels_5, out_channels_5]),
+                             b = NN.Variables.bias_variable([out_channels_5]))
 
         self.f[5] = NN.Layers.fullconn(x_4, self.w[5])
         z_5 = self.f[5].out() + self.b[5]
@@ -457,13 +480,8 @@ class Model:
         in_channels_6 = out_channels_5
         out_channels_6 = 10
 
-        if not self.started:
-            self.w.append(NN.Variables.weight_variable([in_channels_6, out_channels_6]))
-            self.dw.append(None)
-            self.b.append(NN.Variables.bias_variable([out_channels_6]))
-            self.db.append(None)
-            self.f.append(None)
-            self.s.append(None)
+        self.init_layer_vars(w = NN.Variables.weight_variable([in_channels_6, out_channels_6]),
+                             b = NN.Variables.bias_variable([out_channels_6]))
 
         self.f[6] = NN.Layers.fullconn(x_5, self.w[6])
         z_6 = self.f[6].out() + self.b[6]
@@ -472,20 +490,34 @@ class Model:
         x_6 = self.s[6].out()
         
         self.batch_y_out = x_6
-
-        self.started = True
         
         return self.batch_y_out
     
-    def backpropagate(self, batch_y_labels, lr = 0.5):
+    def backpropagate(self, batch_y_labels, lr=0.5):
         n_layers = len(self.dw)
-        cost = NN.Cost.softmax_cross_entropy(batch_y_labels, self.batch_y_out)
+        if not self.started:
+            if not self.optimizer_func is None:
+                self.optimizer = self.optimizer_func(lr, n_layers)
+            self.started = True
 
-        delta = -lr * cost.grad_z()
+        cost = self.cost_func(batch_y_labels, self.batch_y_out)
+
+        if self.optimizer_func is None:
+            lr_eff_w, lr_eff_b = lr, lr
+        else:
+            lr_eff_w, lr_eff_b = self.optimizer.lr_eff()
+
+        if 'grad_z' in vars(self.cost_func):
+            delta = -cost.grad_z()
+        elif 'grad_x' in vars(self.cost_func):
+            delta = -self.s[n_layers - 1].grad_z(cost.grad_x())
+        else:
+            raise Exception("No cost function recognized.")
+
         if not self.dw[n_layers - 1] is None:
-            self.db[n_layers - 1] = np.sum(delta, axis = tuple(range(delta.ndim - 1))) / self.batch_size
+            self.db[n_layers - 1] = lr_eff_b * np.mean(np.sum(delta, axis = tuple(range(1, delta.ndim - 1))), axis = 0)
             self.b[n_layers - 1] += self.db[n_layers - 1]
-            self.dw[n_layers - 1] = self.f[n_layers - 1].grad_w(delta) / self.batch_size
+            self.dw[n_layers - 1] = lr_eff_w * np.mean(self.f[n_layers - 1].grad_w(delta), axis = 0)
             self.w[n_layers - 1] += self.dw[n_layers - 1]
         
         for i in reversed(range(n_layers - 1)):
@@ -493,12 +525,15 @@ class Model:
                 delta = self.f[i + 1].grad_x(delta)
             else:
                 delta = self.s[i].grad_z(self.f[i + 1].grad_x(delta))
-                self.db[i] = np.sum(delta, axis = tuple(range(delta.ndim - 1))) / self.batch_size
+                self.db[i] = lr_eff_b * np.mean(np.sum(delta, axis = tuple(range(delta.ndim - 1))), axis = 0)
                 self.b[i] += self.db[i]
-                self.dw[i] = self.f[i].grad_w(delta) / self.batch_size
+                self.dw[i] = lr_eff_w * np.mean(self.f[i].grad_w(delta), axis = 0)
                 self.w[i] += self.dw[i]
+
+        if not self.optimizer_func is None:
+            self.optimizer.step(self.dw, self.db)
     
-    def train(self, batch_size, epochs, lr = 0.5):
+    def train(self, batch_size, epochs, lr=0.5):
         batch_num = 1
         while self.epochs_completed < epochs:
             prev_nepoch = self.epochs_completed
@@ -507,7 +542,7 @@ class Model:
                 batch_num = 1
             batch_y_out = self.eval(batch_x_images)
             self.backpropagate(batch_y_labels, lr = lr)
-            if batch_num % 50 == 0:
+            if batch_num % 100 == 0:
                 batch_accuracy = NN.Metrics.accuracy(batch_y_labels, batch_y_out)
                 print("Epoch: {0}, Batch: {1}, Accuracy: {2:.4f}".format(self.epochs_completed + 1, batch_num, batch_accuracy))
             batch_num += 1
@@ -522,8 +557,8 @@ if __name__ == '__main__':
     # Import data
     mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True)
 
-    model = Model(mnist.train)
-    model.train(50, 10)
+    model = Model(mnist.train).optimize_with(NN.Optimizers.Adagrad).minimize(NN.Cost.softmax_cross_entropy)
+    model.train(batch_size = 100, epochs = 200, lr = 0.5)
 
     test_accuracy = NN.Metrics.accuracy(mnist.test.labels, model.eval(mnist.test.images))
     print("\n Test Accuracy: {0:.4f}".format(test_accuracy))

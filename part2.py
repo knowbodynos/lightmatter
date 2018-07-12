@@ -148,7 +148,7 @@ def main(_):
     # outputs of 'y', and then average across the batch.
     
     cross_entropy = tf.reduce_mean(
-            tf.nn.softmax_cross_entropy_with_logits_v2(labels=y_, logits=y))
+            tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y))
     train_step = tf.train.AdagradOptimizer(0.5).minimize(cross_entropy)
     correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
