@@ -2,8 +2,15 @@ import argparse
 import sys
 import numpy as np
 from math import ceil
+from time import time
 from itertools import product
 from scipy.stats import truncnorm
+
+try:
+    from img_to_mat.img_to_mat import img_to_mat, mat_to_img
+except ImportError:
+    print('run the following from the img_to_mat directory and try again:')
+    print('python setup.py build_ext --inplace')
 
 from tensorflow.examples.tutorials.mnist import input_data
 
@@ -39,35 +46,35 @@ class NN:
                 pad_right = 0
             return pad_top, pad_bottom, pad_left, pad_right, out_height, out_width
         
-        def img_to_col(x, out_height, out_width, filter_height, filter_width, strides):
-            batch_size = x.shape[0]
-            in_channels = x.shape[3]
-            x_col = np.zeros((batch_size * out_height * out_width, filter_height * filter_width * in_channels))
-            for b in range(batch_size):
-                for i in range(out_height):
-                    for j in range(out_width):
-                        row = b * out_height * out_width + i * out_width + j
-                        for p in range(filter_height):
-                            for q in range(filter_width):
-                                for r in range(in_channels):
-                                    col = p * filter_width * in_channels + q * in_channels + r
-                                    x_col[row, col] += x[b, strides[1] * i + p, strides[2] * j + q, r]
-            return x_col
+        # def img_to_col(x, out_height, out_width, filter_height, filter_width, strides):
+        #     batch_size = x.shape[0]
+        #     in_channels = x.shape[3]
+        #     x_col = np.zeros((batch_size * out_height * out_width, filter_height * filter_width * in_channels))
+        #     for b in range(batch_size):
+        #         for i in range(out_height):
+        #             for j in range(out_width):
+        #                 row = b * out_height * out_width + i * out_width + j
+        #                 for p in range(filter_height):
+        #                     for q in range(filter_width):
+        #                         for r in range(in_channels):
+        #                             col = p * filter_width * in_channels + q * in_channels + r
+        #                             x_col[row, col] += x[b, strides[1] * i + p, strides[2] * j + q, r]
+        #     return x_col
         
-        def col_to_img(x_col, out_height, out_width, in_height, in_width, filter_height, filter_width, strides):
-            batch_size = x_col.shape[0] // (out_height * out_width)
-            in_channels = x_col.shape[1] // (filter_height * filter_width)
-            x = np.zeros((batch_size, in_height, in_width, in_channels))
-            for b in range(batch_size):
-                for i in range(out_height):
-                    for j in range(out_width):
-                        row = b * out_height * out_width + i * out_width + j
-                        for p in range(filter_height):
-                            for q in range(filter_width):
-                                for r in range(in_channels):
-                                    col = p * filter_width * in_channels + q * in_channels + r
-                                    x[b, strides[1] * i + p, strides[2] * j + q, r] += x_col[row, col]
-            return x
+        # def col_to_img(x_col, out_height, out_width, in_height, in_width, filter_height, filter_width, strides):
+        #     batch_size = x_col.shape[0] // (out_height * out_width)
+        #     in_channels = x_col.shape[1] // (filter_height * filter_width)
+        #     x = np.zeros((batch_size, in_height, in_width, in_channels))
+        #     for b in range(batch_size):
+        #         for i in range(out_height):
+        #             for j in range(out_width):
+        #                 row = b * out_height * out_width + i * out_width + j
+        #                 for p in range(filter_height):
+        #                     for q in range(filter_width):
+        #                         for r in range(in_channels):
+        #                             col = p * filter_width * in_channels + q * in_channels + r
+        #                             x[b, strides[1] * i + p, strides[2] * j + q, r] += x_col[row, col]
+        #     return x
         
         
     class Variables:
@@ -202,17 +209,19 @@ class NN:
                 return self.out
             
             def out(self):
-                x_col = NN.Utils.img_to_col(self.x_pad, self.out_height, self.out_width, self.filter_height, self.filter_width, self.strides)
-                w_col = self.w[::-1, ::-1].reshape((-1, self.out_channels))
-                self.fullconn = NN.Layers.fullconn(x_col, w_col)
-                out_col = self.fullconn.out()
-                self.out_val = out_col.reshape((self.batch_size, self.out_height, self.out_width, self.out_channels))
+                # x_col = NN.Utils.img_to_col(self.x_pad, self.out_height, self.out_width, self.filter_height, self.filter_width, self.strides)
+                x_mat = img_to_mat(self.x_pad, self.out_height, self.out_width, self.filter_height, self.filter_width, self.strides)
+                w_mat = self.w[::-1, ::-1].reshape((-1, self.out_channels))
+                self.fullconn = NN.Layers.fullconn(x_mat, w_mat)
+                out_mat = self.fullconn.out()
+                self.out_val = out_mat.reshape((self.batch_size, self.out_height, self.out_width, self.out_channels))
                 return self.out_val
             
             def grad_x(self, grad_out):
                 grad_out_reshaped = grad_out.reshape((-1, self.out_channels))
-                grad_x_col = self.fullconn.grad_x(grad_out_reshaped)
-                self.grad_x_val = NN.Utils.col_to_img(grad_x_col, self.out_height, self.out_width, self.x_pad.shape[1], self.x_pad.shape[2], self.filter_height, self.filter_width, self.strides)
+                grad_x_mat = self.fullconn.grad_x(grad_out_reshaped)
+                # self.grad_x_val = NN.Utils.col_to_img(grad_x_col, self.out_height, self.out_width, self.x_pad.shape[1], self.x_pad.shape[2], self.filter_height, self.filter_width, self.strides)
+                self.grad_x_val = mat_to_img(grad_x_mat, self.out_height, self.out_width, self.x_pad.shape[1], self.x_pad.shape[2], self.filter_height, self.filter_width, self.strides)
                 if self.pad_top > 0:
                     self.grad_x_val = self.grad_x_val[:, self.pad_top:, :, :]
                 if self.pad_bottom > 0:
@@ -276,16 +285,18 @@ class NN:
             
             def out(self):
                 x_reshaped = self.x_pad.transpose((3, 0, 1, 2)).reshape((self.in_channels * self.batch_size, self.in_height, self.in_width, 1))
-                x_col = NN.Utils.img_to_col(x_reshaped, self.out_height, self.out_width, self.ksize[1], self.ksize[2], self.strides)
-                self.x_col_maxcols = x_col.argmax(axis = 1)
-                out_reshaped = x_col[np.arange(x_col.shape[0]), self.x_col_maxcols]
+                # x_col = NN.Utils.img_to_col(x_reshaped, self.out_height, self.out_width, self.ksize[1], self.ksize[2], self.strides)
+                x_mat = img_to_mat(x_reshaped, self.out_height, self.out_width, self.ksize[1], self.ksize[2], self.strides)
+                self.x_mat_maxcols = x_mat.argmax(axis = 1)
+                out_reshaped = x_mat[np.arange(x_mat.shape[0]), self.x_mat_maxcols]
                 self.out_val = out_reshaped.reshape((self.in_channels, self.batch_size, self.out_height, self.out_width)).transpose((1, 2, 3, 0))
                 return self.out_val
             
             def grad_x(self, grad_out):
-                grad_x_col = np.zeros((self.in_channels * self.batch_size * self.out_height * self.out_width, self.ksize[1] * self.ksize[2]))
-                grad_x_col[np.arange(grad_x_col.shape[0]), self.x_col_maxcols] = grad_out.transpose((3, 0, 1, 2)).flatten()
-                grad_x_reshaped = NN.Utils.col_to_img(grad_x_col, self.out_height, self.out_width, self.x_pad.shape[1], self.x_pad.shape[2], self.ksize[1], self.ksize[2], self.strides)
+                grad_x_mat = np.zeros((self.in_channels * self.batch_size * self.out_height * self.out_width, self.ksize[1] * self.ksize[2]))
+                grad_x_mat[np.arange(grad_x_mat.shape[0]), self.x_mat_maxcols] = grad_out.transpose((3, 0, 1, 2)).flatten()
+                # grad_x_reshaped = NN.Utils.col_to_img(grad_x_mat, self.out_height, self.out_width, self.x_pad.shape[1], self.x_pad.shape[2], self.ksize[1], self.ksize[2], self.strides)
+                grad_x_reshaped = mat_to_img(grad_x_mat, self.out_height, self.out_width, self.x_pad.shape[1], self.x_pad.shape[2], self.ksize[1], self.ksize[2], self.strides)
                 if self.pad_top > 0:
                     grad_x_reshaped = grad_x_reshaped[:, self.pad_top:, :, :]
                 if self.pad_bottom > 0:
@@ -403,7 +414,7 @@ class Model:
         
     def eval(self, batch_x_images):
         # Layer 0 (2D convolution layer)
-        filter_shape_0 = [5, 5]
+        filter_shape_0 = [10, 10]
         in_channels_0 = 1
         out_channels_0 = 32
 
@@ -432,7 +443,7 @@ class Model:
         # Layer 2 (2D convolution layer)
         filter_shape_2 = [5, 5]
         in_channels_2 = out_channels_1
-        out_channels_2 = 64
+        out_channels_2 = 16
 
         self.init_layer_vars(w = NN.Variables.weight_variable(filter_shape_2 + [in_channels_2, out_channels_2]),
                              b = NN.Variables.bias_variable([out_channels_2]))
@@ -533,18 +544,28 @@ class Model:
         if not self.optimizer_func is None:
             self.optimizer.step(self.dw, self.db)
     
-    def train(self, batch_size, epochs, lr=0.5):
+    def train(self, batch_size, epochs, lr=0.5, timing=False):
         batch_num = 1
         while self.epochs_completed < epochs:
             prev_nepoch = self.epochs_completed
             batch_x_images, batch_y_labels = self.train_set.next_batch(batch_size)
             if self.train_set.epochs_completed > prev_nepoch:
                 batch_num = 1
+            if timing:
+                start_forward_time = time()
             batch_y_out = self.eval(batch_x_images)
+            if timing:
+                forward_time = (time() - start_forward_time) / batch_size
+                start_backward_time = time()
             self.backpropagate(batch_y_labels, lr = lr)
+            if timing:
+                backward_time = (time() - start_backward_time) / batch_size
             if batch_num % 100 == 0:
                 batch_accuracy = NN.Metrics.accuracy(batch_y_labels, batch_y_out)
-                print("Epoch: {0}, Batch: {1}, Accuracy: {2:.4f}".format(self.epochs_completed + 1, batch_num, batch_accuracy))
+                if timing:
+                    print("Epoch: {0}, Batch: {1}, Accuracy: {2:.4f}, Forward Time: {3:.2f}, Backward Time: {4:.2f}".format(self.epochs_completed + 1, batch_num, batch_accuracy, forward_time, backward_time))
+                else:
+                    print("Epoch: {0}, Batch: {1}, Accuracy: {2:.4f}".format(self.epochs_completed + 1, batch_num, batch_accuracy))
             batch_num += 1
 
 
@@ -557,8 +578,10 @@ if __name__ == '__main__':
     # Import data
     mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True)
 
-    model = Model(mnist.train).optimize_with(NN.Optimizers.Adagrad).minimize(NN.Cost.softmax_cross_entropy)
-    model.train(batch_size = 100, epochs = 200, lr = 0.5)
+    model = Model(mnist.train)
+    model.optimize_with(NN.Optimizers.Adagrad)
+    model.minimize(NN.Cost.softmax_cross_entropy)
+    model.train(batch_size = 100, epochs = 200, lr = 1e-3, timing = True)
 
     test_accuracy = NN.Metrics.accuracy(mnist.test.labels, model.eval(mnist.test.images))
     print("\n Test Accuracy: {0:.4f}".format(test_accuracy))
