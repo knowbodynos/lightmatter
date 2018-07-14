@@ -381,11 +381,11 @@ class NN:
 
 
 class Model:
-    def __init__(self, train_set, x_image_shape=[28, 28], optimizer=None, cost=NN.Cost.mean_squared_error):
+    def __init__(self, x_image_shape=[28, 28], lr=0.5, optimizer=None, cost=NN.Cost.mean_squared_error):
         self.started = False
-        self.train_set = train_set
         self.epochs_completed = 0
         self.x_image_shape = x_image_shape
+        self.lr = lr
         self.optimizer_func = optimizer
         self.cost_func = cost
         self.w = []
@@ -395,8 +395,10 @@ class Model:
         self.f = []
         self.s = []
 
-    def optimize_with(self, optimizer_func):
+    def optimize_with(self, optimizer_func, lr=None):
         self.optimizer_func = optimizer_func
+        if lr != self.lr:
+            self.lr = lr
         return self
 
     def minimize(self, cost_func):
@@ -504,17 +506,17 @@ class Model:
         
         return self.batch_y_out
     
-    def backpropagate(self, batch_y_labels, lr=0.5):
+    def backpropagate(self, batch_y_labels):
         n_layers = len(self.dw)
         if not self.started:
             if not self.optimizer_func is None:
-                self.optimizer = self.optimizer_func(lr, n_layers)
+                self.optimizer = self.optimizer_func(self.lr, n_layers)
             self.started = True
 
         cost = self.cost_func(batch_y_labels, self.batch_y_out)
 
         if self.optimizer_func is None:
-            lr_eff_w, lr_eff_b = lr, lr
+            lr_eff_w, lr_eff_b = self.lr, self.lr
         else:
             lr_eff_w, lr_eff_b = self.optimizer.lr_eff()
 
@@ -543,48 +545,64 @@ class Model:
 
         if not self.optimizer_func is None:
             self.optimizer.step(self.dw, self.db)
-    
-    def train(self, batch_size, epochs, lr=0.5, timing=False):
-        batch_num = 1
-        while self.epochs_completed < epochs:
-            prev_nepoch = self.epochs_completed
-            batch_x_images, batch_y_labels = self.train_set.next_batch(batch_size)
-            if self.train_set.epochs_completed > prev_nepoch:
-                batch_num = 1
-            if timing:
-                start_forward_time = time()
-            batch_y_out = self.eval(batch_x_images)
-            if timing:
-                forward_time = (time() - start_forward_time) / batch_size
-                start_backward_time = time()
-            self.backpropagate(batch_y_labels, lr = lr)
-            if timing:
-                backward_time = (time() - start_backward_time) / batch_size
-            if batch_num % 100 == 0:
-                batch_accuracy = NN.Metrics.accuracy(batch_y_labels, batch_y_out)
-                if timing:
-                    print("Epoch: {0}, Batch: {1}, Accuracy: {2:.4f}, Forward Time: {3:.2f}, Backward Time: {4:.2f}".format(self.epochs_completed + 1, batch_num, batch_accuracy, forward_time, backward_time))
-                else:
-                    print("Epoch: {0}, Batch: {1}, Accuracy: {2:.4f}".format(self.epochs_completed + 1, batch_num, batch_accuracy))
-            batch_num += 1
 
+    def train_step(self, batch_x_images, batch_y_labels, timing=False):
+        if timing:
+            start_forward_time = time()
+        batch_y_out = self.eval(batch_x_images)
+        if timing:
+            forward_time = (time() - start_forward_time) / batch_size
+            start_backward_time = time()
+        self.backpropagate(batch_y_labels, lr = lr)
+        if timing:
+            backward_time = (time() - start_backward_time) / batch_size
+
+def main(_):
+    # Open output files
+    train_stream = open("train_accuracy.csv", "w")
+    print("Epoch,Train Accuracy\n", file=train_stream)
+
+    test_stream = open("test_accuracy.csv", "w")
+    print("Epoch,Test Accuracy\n", file=test_stream)
+
+    # Import data
+    mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True)
+
+    # Create the model
+    model = Model(mnist.train).optimize_with(NN.Optimizers.Adagrad, lr = 1e-3).minimize(NN.Cost.softmax_cross_entropy)
+    timing = True
+
+    # Train
+    batch_size = 100
+    epochs = 2
+    batch_num = 1
+    while mnist.train.epochs_completed < epochs:
+        prev_nepoch = mnist.train.epochs_completed
+        batch_x_images, batch_y_labels = mnist.train.next_batch(batch_size)
+        if mnist.train.epochs_completed > prev_nepoch:
+            train_accuracy = NN.Metrics.accuracy(mnist.train.images, mnist.train.labels)
+            print("{},{}\n".format(prev_nepoch, train_accuracy), file=train_stream)
+            test_accuracy = NN.Metrics.accuracy(mnist.test.images, mnist.test.labels)
+            print("{},{}\n".format(prev_nepoch, test_accuracy), file=test_stream)
+            batch_num = 1
+        model.train_step(batch_x_images, batch_y_labels, timing=timing)
+        if batch_num % 100 == 0:
+            batch_accuracy = NN.Metrics.accuracy(batch_y_labels, batch_y_out)
+            if timing:
+                print("Epoch: {0}, Batch: {1}, Accuracy: {2:.4f}, Forward Time: {3:.2f}, Backward Time: {4:.2f}".format(mnist.train.epochs_completed + 1, batch_num, batch_accuracy, forward_time, backward_time))
+            else:
+                print("Epoch: {0}, Batch: {1}, Accuracy: {2:.4f}".format(mnist.train.epochs_completed + 1, batch_num, batch_accuracy))
+        batch_num += 1
+
+    test_accuracy = NN.Metrics.accuracy(mnist.test.labels, model.eval(mnist.test.images))
+    print("\n Test Accuracy: {0:.4f}".format(test_accuracy))
+
+    train_stream.close()
+    test_stream.close()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, default='/tmp/tensorflow/mnist/input_data',
                                             help='Directory for storing input data')
     FLAGS, unparsed = parser.parse_known_args()
-    
-    # Import data
-    mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True)
-
-    model = Model(mnist.train)
-    model.optimize_with(NN.Optimizers.Adagrad)
-    model.minimize(NN.Cost.softmax_cross_entropy)
-    model.train(batch_size = 100, epochs = 200, lr = 1e-3, timing = True)
-
-    test_accuracy = NN.Metrics.accuracy(mnist.test.labels, model.eval(mnist.test.images))
-    print("\n Test Accuracy: {0:.4f}".format(test_accuracy))
-
-    # batch_accuracy = sum(map(NN.Metrics.accuracy, *model.batch(2, lr=1e-3))) / 2
-    # print("\n Accuracy: {0:.4f}".format(batch_accuracy))
+    main([sys.argv[0]] + unparsed)
