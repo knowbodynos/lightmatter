@@ -127,6 +127,7 @@ class NN:
                 self.e_z_sum = self.e_z.reshape((self.e_z.shape[0], -1)).sum(axis = 1, keepdims = True)
 
             def out(self):
+                print(self.e_z)
                 self.out = self.e_z / self.e_z_sum
                 return self.out
             
