@@ -105,17 +105,18 @@ class NN:
             def __init__(self, z):
                 """Compute the rectified linear unit using z."""
                 self.z = z
-                self.mask_nonneg = (z >= 0).astype(np.float32)
+                self.mask_forward = (z >= 0).astype(np.float32)
                 mask_zero = (z == 0).astype(np.float32)
-                self.mask = self.mask_nonneg - 0.5 * mask_zero
+                self.mask_backward = self.mask_forward - 0.5 * mask_zero
 
             def out(self):
-                self.out = self.z * self.mask
+                self.out = self.z * self.mask_forward
                 return self.out
 
             def grad_z(self, grad_out):
                 """Compute the derivative of the rectified linear unit using z."""
-                self.grad_z = grad_out * self.mask
+                print(grad_out)
+                self.grad_z = grad_out * self.mask_backward
                 return self.grad_z
 
 
@@ -123,18 +124,23 @@ class NN:
             def __init__(self, z):
                 """Compute the softmax of z."""
                 self.z = z
-                self.e_z = np.exp(z - z.max())
-                self.e_z_sum = self.e_z.reshape((self.e_z.shape[0], -1)).sum(axis = 1, keepdims = True)
 
             def out(self):
-                print(self.e_z)
-                self.out = self.e_z / self.e_z_sum
+                z_reshaped = self.z.reshape((self.z.shape[0], -1))
+                z_max_reshaped = z_reshaped.max(axis = 1, keepdims = True)
+                e_z_reshaped = np.exp(z_reshaped - z_max_reshaped)
+                e_z_sum_reshaped = e_z_reshaped.sum(axis = 1, keepdims = True)
+                out_reshaped = e_z_reshaped / e_z_sum_reshaped
+                self.out = out_reshaped.reshape(self.z.shape)
                 return self.out
             
             def grad_z(self, grad_out):
                 """Compute the derivative of the softmax of z."""
                 # self.grad_z = (grad_out * self.out) - grad_out.dot(np.outer(self.out, self.out))
-                self.grad_z = (grad_out - np.diagonal(grad_out.dot(self.out.T))) * self.out
+                grad_out_reshaped = grad_out.reshape((grad_out.shape[0], -1))
+                out_reshaped = self.out.reshape((self.out.shape[0], -1))
+                inner = np.diagonal(grad_out_reshaped.dot(out_reshaped.T)).reshape((-1, 1))
+                self.grad_z = (grad_out_reshaped - inner).reshape(grad_out.shape) * self.out
                 return self.grad_z
     
     
@@ -172,7 +178,6 @@ class NN:
                 return self.grad_x_val
 
             def grad_w(self, grad_out):
-                self.x.transpose()
                 self.grad_w_val = self.x.T.dot(grad_out)
                 return self.grad_w_val
             
@@ -531,7 +536,7 @@ class Model:
 
         if not self.w[n_layers - 1] is None:
             # print(np.mean(np.sum(delta, axis = tuple(range(1, delta.ndim - 1))), axis = 0))
-            self.db[n_layers - 1] = lr_eff_b[n_layers - 1] * np.mean(np.sum(delta, axis = tuple(range(1, delta.ndim - 1))), axis = 0)
+            self.db[n_layers - 1] = lr_eff_b[n_layers - 1] * np.sum(delta, axis = tuple(range(delta.ndim - 1)))
             self.b[n_layers - 1] += self.db[n_layers - 1]
             # print(self.f[n_layers - 1].grad_w(delta).shape)
             self.dw[n_layers - 1] = lr_eff_w[n_layers - 1] * self.f[n_layers - 1].grad_w(delta)
@@ -544,7 +549,7 @@ class Model:
             else:
                 delta = self.s[i].grad_z(self.f[i + 1].grad_x(delta))
                 # print(delta.shape)
-                self.db[i] = lr_eff_b[i] * np.mean(np.sum(delta, axis = tuple(range(delta.ndim - 1))), axis = 0)
+                self.db[i] = lr_eff_b[i] * np.sum(delta, axis = tuple(range(delta.ndim - 1)))
                 self.b[i] += self.db[i]
                 # print(self.f[i].grad_w(delta).shape)
                 self.dw[i] = lr_eff_w[i] * self.f[i].grad_w(delta)
