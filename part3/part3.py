@@ -115,7 +115,7 @@ class NN:
 
             def grad_z(self, grad_out):
                 """Compute the derivative of the rectified linear unit using z."""
-                print(grad_out)
+#                 print(grad_out)
                 self.grad_z = grad_out * self.mask_backward
                 return self.grad_z
 
@@ -218,7 +218,8 @@ class NN:
             def out(self):
                 # x_col = NN.Utils.img_to_col(self.x_pad, self.out_height, self.out_width, self.filter_height, self.filter_width, self.strides)
                 x_mat = img_to_mat(self.x_pad, self.out_height, self.out_width, self.filter_height, self.filter_width, self.strides)
-                w_mat = self.w[::-1, ::-1].reshape((-1, self.out_channels))
+#                 w_mat = self.w[::-1, ::-1].reshape((-1, self.out_channels))
+                w_mat = self.w.reshape((-1, self.out_channels))
                 self.fullconn = NN.Layers.fullconn(x_mat, w_mat)
                 out_mat = self.fullconn.out()
                 self.out_val = out_mat.reshape((self.batch_size, self.out_height, self.out_width, self.out_channels))
@@ -351,8 +352,7 @@ class NN:
                 self.y_out = y_out
             
             def out(self):
-                softmax = NN.Activations.softmax(self.y_out)
-                self.out_val = -np.sum(self.y_label * np.log(softmax.out()), axis = 1)
+                self.out_val = -np.sum(self.y_label * np.log(self.y_out), axis = 1)
                 return self.out_val
             
             def grad_z(self):
@@ -376,9 +376,9 @@ class NN:
             def step(self, dw, db):
                 for i in range(len(dw)):
                     if not dw[i] is None:
-                        self.dw_sum_sq[i] += dw[i] ** 2
+                        self.dw_sum_sq[i] += np.square(dw[i])
                     if not db[i] is None:
-                        self.db_sum_sq[i] += db[i] ** 2
+                        self.db_sum_sq[i] += np.square(db[i])
 
             def lr_eff(self):
                 lr_eff_w = []
@@ -514,6 +514,7 @@ class Model:
         return self.batch_y_out
     
     def backpropagate(self, batch_y_labels):
+        batch_size = batch_y_labels.shape[0]
         n_layers = len(self.dw)
         if not self.started:
             if not self.optimizer_func is None:
@@ -536,10 +537,10 @@ class Model:
 
         if not self.w[n_layers - 1] is None:
             # print(np.mean(np.sum(delta, axis = tuple(range(1, delta.ndim - 1))), axis = 0))
-            self.db[n_layers - 1] = lr_eff_b[n_layers - 1] * np.sum(delta, axis = tuple(range(delta.ndim - 1)))
+            self.db[n_layers - 1] = lr_eff_b[n_layers - 1] * np.sum(delta, axis = tuple(range(delta.ndim - 1))) / batch_size
             self.b[n_layers - 1] += self.db[n_layers - 1]
             # print(self.f[n_layers - 1].grad_w(delta).shape)
-            self.dw[n_layers - 1] = lr_eff_w[n_layers - 1] * self.f[n_layers - 1].grad_w(delta)
+            self.dw[n_layers - 1] = lr_eff_w[n_layers - 1] * self.f[n_layers - 1].grad_w(delta) / batch_size
             # print("{}: {}".format(n_layers - 1, self.dw[n_layers - 1]))
             self.w[n_layers - 1] += self.dw[n_layers - 1]
         
@@ -549,10 +550,10 @@ class Model:
             else:
                 delta = self.s[i].grad_z(self.f[i + 1].grad_x(delta))
                 # print(delta.shape)
-                self.db[i] = lr_eff_b[i] * np.sum(delta, axis = tuple(range(delta.ndim - 1)))
+                self.db[i] = lr_eff_b[i] * np.sum(delta, axis = tuple(range(delta.ndim - 1))) / batch_size
                 self.b[i] += self.db[i]
                 # print(self.f[i].grad_w(delta).shape)
-                self.dw[i] = lr_eff_w[i] * self.f[i].grad_w(delta)
+                self.dw[i] = lr_eff_w[i] * self.f[i].grad_w(delta) / batch_size
                 # print("{}: {}".format(i, self.dw[i]))
                 self.w[i] += self.dw[i]
 
@@ -585,13 +586,13 @@ def main(_):
     mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True)
 
     # Create the model
-    # model = Model().optimize_with(NN.Optimizers.Adagrad, lr = 1e-3).minimize(NN.Cost.softmax_cross_entropy)
-    model = Model(lr = 1e-3).minimize(NN.Cost.softmax_cross_entropy)
+    model = Model().optimize_with(NN.Optimizers.Adagrad, lr = 1e-3).minimize(NN.Cost.softmax_cross_entropy)
+    # model = Model(lr = 1e-3).minimize(NN.Cost.softmax_cross_entropy)
     timing = True
 
     # Train
-    batch_size = 2
-    epochs = 2
+    batch_size = 100
+    epochs = 5
     batch_num = 1
     while mnist.train.epochs_completed < epochs:
         prev_nepoch = mnist.train.epochs_completed

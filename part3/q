@@ -1,7 +1,0 @@
-Extracting /tmp/tensorflow/mnist/input_data/train-images-idx3-ubyte.gz
-Extracting /tmp/tensorflow/mnist/input_data/train-labels-idx1-ubyte.gz
-Extracting /tmp/tensorflow/mnist/input_data/t10k-images-idx3-ubyte.gz
-Extracting /tmp/tensorflow/mnist/input_data/t10k-labels-idx1-ubyte.gz
-[[ -1.85402532e-05  -1.11118945e-02   9.96534318e-01  -4.70866658e-03
-   -2.12799333e-05  -9.76858565e-01  -2.06588627e-03  -1.73362352e-03
-   -1.22005179e-05  -3.66081843e-06]]

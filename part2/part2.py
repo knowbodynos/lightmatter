@@ -54,11 +54,11 @@ def bias_variable(shape):
 
 # Layers
 
-def conv_2d(x, W):
+def conv2d(x, W):
     """2D convolution of x with filter W, unit stride."""
     return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
 
-def max_pool_2x2(x):
+def maxpool2d(x):
     """2x2 max pooling layer with non-overlapping kernel stride."""
     return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
@@ -68,62 +68,80 @@ def flatten(x):
         size *= dim
     return tf.reshape(x, [-1, size])
 
-def full_conn(x, W):
+def fullconn(x, W):
     return tf.matmul(x, W)
 
 
 # Model
 
 def model(x_image, x_image_shape = [28, 28]):
-    # Initialize input
+    # Layer 0 (2D convolution layer)
+    filter_shape_0 = [10, 10]
+    in_channels_0 = 1
+    out_channels_0 = 32
+
+    # Reshape input
     batch = -1
-    in_channels = 1
-    x_input = tf.reshape(x_image, [batch] + list(x_image_shape) + [in_channels])
+    x_0 = tf.reshape(x_image, [batch] + list(x_image_shape) + [in_channels_0])
 
-    # Layer 1 (2D convolution layer)
-    filter_shape_1 = [10, 10]
-    in_channels_1 = in_channels
-    out_channels_1 = 32
+    w_0 = weight_variable(filter_shape_0 + [in_channels_0, out_channels_0])
+    b_0 = bias_variable([out_channels_0])
 
-    W_conv2d_1 = weight_variable(filter_shape_1 + [in_channels_1, out_channels_1])
-    b_conv2d_1 = bias_variable([out_channels_1])
+    z_0 = conv2d(x_0, w_0) + b_0
 
-    y_conv2d_1 = tf.nn.relu(conv_2d(x_input, W_conv2d_1) + b_conv2d_1)
-    y_pool2x2_1 = max_pool_2x2(y_conv2d_1)
+    x_1 = tf.nn.relu(z_0)
+
+    # Layer 1 (Max pool 2x2)
+    in_channels_1 = out_channels_0
+    out_channels_1 = in_channels_1
+        
+    x_2 = maxpool2d(x_1)
 
     # Layer 2 (2D convolution layer)
     filter_shape_2 = [5, 5]
     in_channels_2 = out_channels_1
     out_channels_2 = 16
 
-    W_conv2d_2 = weight_variable(filter_shape_2 + [in_channels_2, out_channels_2])
-    b_conv2d_2 = bias_variable([out_channels_2])
+    w_2 = weight_variable(filter_shape_2 + [in_channels_2, out_channels_2])
+    b_2 = bias_variable([out_channels_2])
 
-    y_conv2d_2 = tf.nn.relu(conv_2d(y_pool2x2_1, W_conv2d_2) + b_conv2d_2)
-    y_pool2x2_2 = max_pool_2x2(y_conv2d_2)
+    z_2 = conv2d(x_2, w_2) + b_2
 
-    # Flatten input
-    y_flattened = flatten(y_pool2x2_2)
+    x_3 = tf.nn.relu(z_2)
 
-    # Layer 3 (Fully connected layer)
-    in_channels_3 = y_flattened.shape.as_list()[-1]
-    out_channels_3 = 1024
+    # Layer 3 (Max pool 2x2)
+    in_channels_3 = out_channels_2
+    out_channels_3 = in_channels_3
+        
+    x_4 = maxpool2d(x_3)
 
-    W_fullconn_3 = weight_variable([in_channels_3, out_channels_3])
-    b_fullconn_3 = bias_variable([out_channels_3])
-
-    y_fullconn_3 = tf.nn.relu(full_conn(y_flattened, W_fullconn_3) + b_fullconn_3)
-
-    # Layer 4 (Fully connected layer)
+    # Layer 4 (Flatten)
     in_channels_4 = out_channels_3
-    out_channels_4 = 10
+    out_channels_4 = in_channels_4
 
-    W_fullconn_4 = weight_variable([in_channels_4, out_channels_4])
-    b_fullconn_4 = bias_variable([out_channels_4])
+    x_5 = flatten(x_4)
 
-    y_fullconn_4 = full_conn(y_fullconn_3, W_fullconn_4) + b_fullconn_4
+    # Layer 5 (Fully connected layer)
+    in_channels_5 = x_5.shape.as_list()[-1]
+    out_channels_5 = 1024
 
-    return y_fullconn_4
+    w_5 = weight_variable([in_channels_5, out_channels_5])
+    b_5 = bias_variable([out_channels_5])
+
+    z_5 = fullconn(x_5, w_5) + b_5
+
+    x_6 = tf.nn.relu(z_5)
+
+    # Layer 6 (Fully connected layer)
+    in_channels_6 = out_channels_5
+    out_channels_6 = 10
+
+    w_6 = weight_variable([in_channels_6, out_channels_6])
+    b_6 = bias_variable([out_channels_6])
+
+    z_6 = fullconn(x_6, w_6) + b_6
+
+    return z_6
 
 
 def main(_):

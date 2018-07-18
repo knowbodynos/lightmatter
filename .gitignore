@@ -1,8 +1,11 @@
 .DS_Store
-.ipynb_checkpoints/test-checkpoint.ipynb
+*.ipynb
+.ipynb_checkpoints
 report
-**/*_bkp*
 part3/img_to_mat/__pycache__
 part3/img_to_mat/build
 part3/img_to_mat/*.c
 part3/img_to_mat/*.cpython*
+**/*_bkp*
+**/*.ipynb
+**/.ipynb_checkpoints

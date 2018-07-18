@@ -13,7 +13,7 @@ for accuracy in ["train_accuracy", "test_accuracy"]:
 
     with PdfPages(path + "/" + accuracy + ".pdf") as pdf:
         fig, ax = plt.subplots()
-        fig.set_size_inches(1.5 * 11, 1.5 * 8.5)
+        # fig.set_size_inches(1.5 * 11, 1.5 * 8.5)
         ax.grid()
         ax.set_title(x_label + " vs. " + y_label)
         ax.set_xlabel(x_label)
